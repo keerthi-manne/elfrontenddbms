@@ -8,17 +8,9 @@ import {
   getProjectTeamMembers,
   exportProjectsCSV,
 } from '../api/faculty';
-import NotificationBell from '../components/layout/NotificationBell'; 
-import axios from 'axios';  // ADD THIS
-const API_BASE = 'http://localhost:5000';  // ADD THIS
- // ✅ YOUR PATH
-// ... rest unchanged
+import axios from 'axios';
 
-// Header JSX:
-<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-  <h2>Admin Dashboard</h2>
-  <NotificationBell />  // ✅ WORKING!
-</div>
+const API_BASE = 'http://localhost:5000';
 
 function AdminDashboard() {
   const { authToken, userRole } = useAuth();
@@ -28,15 +20,31 @@ function AdminDashboard() {
   const [teamMembers, setTeamMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
-  const [sortBy, setSortBy] = useState('phase3'); // phase1, phase2, phase3, teamSize
+  const [sortBy, setSortBy] = useState('phase3'); // phase1, phase2, phase3, teamSize, title
   const [sortOrder, setSortOrder] = useState('desc');
+
+  // Create user state
   const [showCreateUser, setShowCreateUser] = useState(false);
   const [createUserForm, setCreateUserForm] = useState({
-  userId: '', name: '', email: '', password: '', role: 'Student', 
-  dept: '', semester: '', status: 'Approved'
-   });
+    userId: '',
+    name: '',
+    email: '',
+    password: '',
+    role: 'Student',
+    dept: '',
+    semester: '',
+    status: 'Approved',
+  });
 
-  // Extract user ID from JWT
+  // Faculty–theme assignment state
+  const [themes, setThemes] = useState([]);
+  const [faculties, setFaculties] = useState([]);
+  const [assignments, setAssignments] = useState([]);
+  const [selectedFacultyId, setSelectedFacultyId] = useState('');
+  const [selectedThemeId, setSelectedThemeId] = useState('');
+  const [adminAssignMsg, setAdminAssignMsg] = useState('');
+
+  // Extract user ID from JWT (if needed later)
   const [currentUserId, setCurrentUserId] = useState(null);
   useEffect(() => {
     if (authToken) {
@@ -56,6 +64,7 @@ function AdminDashboard() {
       const res = await getAllProjectsWithAggregates(authToken);
       setProjects(res.data.projects || []);
     } catch (err) {
+      console.error(err);
       setMessage('Failed to load projects');
     } finally {
       setLoading(false);
@@ -72,6 +81,7 @@ function AdminDashboard() {
       const teamRes = await getProjectTeamMembers(authToken, projectId);
       setTeamMembers(teamRes.data || []);
     } catch (err) {
+      console.error(err);
       setMessage(err.response?.data?.error || 'Failed to load project');
     }
   };
@@ -80,8 +90,9 @@ function AdminDashboard() {
     try {
       await approveProject(authToken, projectId);
       setMessage('Project approved successfully!');
-      loadAllProjects(); // Refresh list
+      loadAllProjects();
     } catch (err) {
+      console.error(err);
       setMessage(err.response?.data?.error || 'Approval failed');
     }
   };
@@ -92,44 +103,127 @@ function AdminDashboard() {
       setMessage('Project rejected');
       loadAllProjects();
     } catch (err) {
+      console.error(err);
       setMessage(err.response?.data?.error || 'Rejection failed');
     }
   };
-  // ✅ FIXED: handleCreateUser with PROPER field names
-const handleCreateUser = async (e) => {
-  e.preventDefault();
-  if (!authToken) return;
-  
-  // ✅ FIX: Map frontend fields to backend expectations
-  const payload = {
-    user_id: createUserForm.userId,
-    name: createUserForm.name,
-    email: createUserForm.email,
-    password: createUserForm.password,
-    role: createUserForm.role,
-    status: createUserForm.status,
-    Dept: createUserForm.dept,        // ✅ Capital D
-    Semester: createUserForm.role === 'Student' ? createUserForm.semester : null  // ✅ Capital S
+
+  // Create user
+  const handleCreateUser = async (e) => {
+    e.preventDefault();
+    if (!authToken) return;
+
+    const payload = {
+      user_id: createUserForm.userId,
+      name: createUserForm.name,
+      email: createUserForm.email,
+      password: createUserForm.password,
+      role: createUserForm.role,
+      status: createUserForm.status,
+      Dept: createUserForm.dept,
+      Semester:
+        createUserForm.role === 'Student' ? createUserForm.semester : null,
+    };
+
+    try {
+      const response = await axios.post(`${API_BASE}/auth/create_user`, payload, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      setMessage(response.data.message || 'User created');
+      setShowCreateUser(false);
+      setCreateUserForm({
+        userId: '',
+        name: '',
+        email: '',
+        password: '',
+        role: 'Student',
+        dept: '',
+        semester: '',
+        status: 'Approved',
+      });
+      loadAllProjects();
+    } catch (err) {
+      console.error('Create user error:', err.response?.data);
+      setMessage(err.response?.data?.error || 'Failed to create user');
+    }
   };
 
+  // Faculty–theme helpers
+  const loadThemes = useCallback(async () => {
+    if (!authToken) return;
+    try {
+      const { data } = await axios.get(`${API_BASE}/themes`, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      setThemes(data || []);
+    } catch (err) {
+      console.error('Themes load error', err);
+      setThemes([]);
+    }
+  }, [authToken]);
+  const loadFaculties = useCallback(async () => {
+  if (!authToken) return;
   try {
-    const response = await axios.post(`${API_BASE}/auth/create_user`, payload, {
-      headers: { Authorization: `Bearer ${authToken}` }
-    });
-    setMessage(response.data.message);
-    setShowCreateUser(false);
-    setCreateUserForm({
-      userId: '', name: '', email: '', password: '',
-      role: 'Student', dept: '', semester: '', status: 'Approved'
-    });
-    loadAllProjects();
+    const { data } = await axios.get(
+      `${API_BASE}/admin/unassigned_faculty`,
+      { headers: { Authorization: `Bearer ${authToken}` } }
+    );
+    setFaculties(data.faculty || []);
   } catch (err) {
-    console.error('Create user error:', err.response?.data);  // ✅ DEBUG
-    setMessage(err.response?.data?.error || 'Failed to create user');
+    console.error('Faculties load error', err);
+    setFaculties([]);
   }
-};
+}, [authToken]);
 
 
+
+
+  const loadAssignments = useCallback(async () => {
+    if (!authToken) return;
+    try {
+      const { data } = await axios.get(
+        `${API_BASE}/admin/faculty_theme_assignments`,
+        { headers: { Authorization: `Bearer ${authToken}` } }
+      );
+      setAssignments(data.assignments || []);
+    } catch (err) {
+      console.error('Assignments load error', err);
+      setAssignments([]);
+    }
+  }, [authToken]);
+
+  const handleAssignFacultyTheme = async () => {
+    if (!selectedFacultyId || !selectedThemeId) {
+      setAdminAssignMsg('Select both faculty and theme.');
+      return;
+    }
+    try {
+      await axios.post(
+        `${API_BASE}/admin/assign_faculty_theme`,
+        {
+          FacultyUserID: selectedFacultyId,
+          ThemeID: parseInt(selectedThemeId),
+        },
+        { headers: { Authorization: `Bearer ${authToken}` } }
+      );
+      setAdminAssignMsg('Faculty assigned to theme successfully ✅');
+      await loadAssignments();
+    } catch (err) {
+      console.error('Assign faculty theme error', err.response?.data);
+      setAdminAssignMsg(
+        err.response?.data?.error || 'Failed to assign faculty to theme'
+      );
+    }
+  };
+
+  // Load all admin data
+  useEffect(() => {
+    if (!authToken) return;
+    loadAllProjects();
+    loadThemes();
+    loadFaculties();
+    loadAssignments();
+  }, [authToken, loadAllProjects, loadThemes, loadFaculties, loadAssignments]);
 
   const sortedProjects = [...projects].sort((a, b) => {
     let aVal, bVal;
@@ -151,25 +245,17 @@ const handleCreateUser = async (e) => {
         bVal = b.team_size || 0;
         break;
       case 'title':
-        // Sort alphabetically by project title
-        if (!a.Title) a.Title = '';
-        if (!b.Title) b.Title = '';
+        aVal = a.Title || '';
+        bVal = b.Title || '';
         return sortOrder === 'desc'
-          ? b.Title.localeCompare(a.Title)
-          : a.Title.localeCompare(b.Title);
+          ? bVal.localeCompare(aVal)
+          : aVal.localeCompare(bVal);
       default:
         aVal = a.phase3_avg || 0;
         bVal = b.phase3_avg || 0;
     }
-    if (sortOrder === 'desc') {
-      return bVal - aVal;
-    }
-    return aVal - bVal;
+    return sortOrder === 'desc' ? bVal - aVal : aVal - bVal;
   });
-
-  useEffect(() => {
-    loadAllProjects();
-  }, [loadAllProjects]);
 
   const handleExportCSV = async () => {
     if (!authToken) {
@@ -186,16 +272,22 @@ const handleCreateUser = async (e) => {
       link.click();
       link.remove();
     } catch (err) {
+      console.error(err);
       setMessage('Failed to export CSV');
     }
   };
 
   if (loading) {
-    return <div style={{ textAlign: 'center', padding: '4rem' }}>Loading projects...</div>;
+    return (
+      <div style={{ textAlign: 'center', padding: '4rem' }}>
+        Loading projects...
+      </div>
+    );
   }
 
   return (
     <div style={{ padding: '1rem', maxWidth: '1400px', margin: '0 auto' }}>
+      {/* Header */}
       <div
         style={{
           display: 'flex',
@@ -210,6 +302,7 @@ const handleCreateUser = async (e) => {
         </p>
       </div>
 
+      {/* Messages */}
       {message && (
         <div
           style={{
@@ -225,6 +318,7 @@ const handleCreateUser = async (e) => {
         </div>
       )}
 
+      {/* Export + Create User buttons */}
       <button
         onClick={handleExportCSV}
         style={{
@@ -235,58 +329,308 @@ const handleCreateUser = async (e) => {
           borderRadius: '6px',
           cursor: 'pointer',
           marginBottom: '1rem',
+          marginRight: '0.5rem',
         }}
       >
         ⬇️ Export Rankings CSV
       </button>
-      <button 
-  onClick={() => setShowCreateUser(!showCreateUser)}
-  style={{ padding: '0.75rem 1.5rem', background: '#17a2b8', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', marginBottom: '1rem' }}
->
-  ➕ Create New User
-</button>
-   
-// ADD FULL FORM HERE:
-{showCreateUser && (
-  <section style={{ marginBottom: '2rem', padding: '1.5rem', background: '#f8f9fa', borderRadius: '8px' }}>
-    <h3>Create New User</h3>
-    <form onSubmit={handleCreateUser} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-      <input placeholder="UserID" value={createUserForm.userId} onChange={(e) => setCreateUserForm({...createUserForm, userId: e.target.value})} required />
-      <input placeholder="Name" value={createUserForm.name} onChange={(e) => setCreateUserForm({...createUserForm, name: e.target.value})} required />
-      <input type="email" placeholder="Email" value={createUserForm.email} onChange={(e) => setCreateUserForm({...createUserForm, email: e.target.value})} required />
-      <input type="password" placeholder="Password" value={createUserForm.password} onChange={(e) => setCreateUserForm({...createUserForm, password: e.target.value})} required />
-      
-      <select value={createUserForm.role} onChange={(e) => setCreateUserForm({...createUserForm, role: e.target.value})} style={{ padding: '0.75rem' }}>
-        <option value="Student">Student</option>
-        <option value="Faculty">Faculty</option>
-        <option value="Admin">Admin</option>
-      </select>
-      
-      <input placeholder="Department" value={createUserForm.dept} onChange={(e) => setCreateUserForm({...createUserForm, dept: e.target.value})} />
-      
-      {createUserForm.role === 'Student' && (
-        <input type="number" placeholder="Semester" value={createUserForm.semester} onChange={(e) => setCreateUserForm({...createUserForm, semester: e.target.value})} min="1" max="8" />
-      )}
-      
-      <select value={createUserForm.status} onChange={(e) => setCreateUserForm({...createUserForm, status: e.target.value})} style={{ padding: '0.75rem' }}>
-        <option value="Approved">Approved</option>
-        <option value="Pending">Pending</option>
-      </select>
-      
-      <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '1rem' }}>
-        <button type="submit" style={{ flex: 1, padding: '0.75rem', background: '#28a745', color: 'white', border: 'none', borderRadius: '6px' }}>Create User</button>
-        <button type="button" onClick={() => setShowCreateUser(false)} style={{ flex: 1, padding: '0.75rem', background: '#6c757d', color: 'white', border: 'none', borderRadius: '6px' }}>Cancel</button>
-      </div>
-    </form>
-  </section>
-)}
 
-      
-      
+      <button
+        onClick={() => setShowCreateUser(!showCreateUser)}
+        style={{
+          padding: '0.75rem 1.5rem',
+          background: '#17a2b8',
+          color: 'white',
+          border: 'none',
+          borderRadius: '6px',
+          cursor: 'pointer',
+          marginBottom: '1rem',
+        }}
+      >
+        ➕ Create New User
+      </button>
+
+      {/* Create User Form */}
+      {showCreateUser && (
+        <section
+          style={{
+            marginBottom: '2rem',
+            padding: '1.5rem',
+            background: '#f8f9fa',
+            borderRadius: '8px',
+          }}
+        >
+          <h3>Create New User</h3>
+          <form
+            onSubmit={handleCreateUser}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: '1rem',
+            }}
+          >
+            <input
+              placeholder="UserID"
+              value={createUserForm.userId}
+              onChange={(e) =>
+                setCreateUserForm({
+                  ...createUserForm,
+                  userId: e.target.value,
+                })
+              }
+              required
+            />
+            <input
+              placeholder="Name"
+              value={createUserForm.name}
+              onChange={(e) =>
+                setCreateUserForm({
+                  ...createUserForm,
+                  name: e.target.value,
+                })
+              }
+              required
+            />
+            <input
+              type="email"
+              placeholder="Email"
+              value={createUserForm.email}
+              onChange={(e) =>
+                setCreateUserForm({
+                  ...createUserForm,
+                  email: e.target.value,
+                })
+              }
+              required
+            />
+            <input
+              type="password"
+              placeholder="Password"
+              value={createUserForm.password}
+              onChange={(e) =>
+                setCreateUserForm({
+                  ...createUserForm,
+                  password: e.target.value,
+                })
+              }
+              required
+            />
+
+            <select
+              value={createUserForm.role}
+              onChange={(e) =>
+                setCreateUserForm({
+                  ...createUserForm,
+                  role: e.target.value,
+                })
+              }
+              style={{ padding: '0.75rem' }}
+            >
+              <option value="Student">Student</option>
+              <option value="Faculty">Faculty</option>
+              <option value="Admin">Admin</option>
+            </select>
+
+            <input
+              placeholder="Department"
+              value={createUserForm.dept}
+              onChange={(e) =>
+                setCreateUserForm({
+                  ...createUserForm,
+                  dept: e.target.value,
+                })
+              }
+            />
+
+            {createUserForm.role === 'Student' && (
+              <input
+                type="number"
+                placeholder="Semester"
+                value={createUserForm.semester}
+                onChange={(e) =>
+                  setCreateUserForm({
+                    ...createUserForm,
+                    semester: e.target.value,
+                  })
+                }
+                min="1"
+                max="8"
+              />
+            )}
+
+            <select
+              value={createUserForm.status}
+              onChange={(e) =>
+                setCreateUserForm({
+                  ...createUserForm,
+                  status: e.target.value,
+                })
+              }
+              style={{ padding: '0.75rem' }}
+            >
+              <option value="Approved">Approved</option>
+              <option value="Pending">Pending</option>
+            </select>
+
+            <div
+              style={{
+                gridColumn: '1 / -1',
+                display: 'flex',
+                gap: '1rem',
+              }}
+            >
+              <button
+                type="submit"
+                style={{
+                  flex: 1,
+                  padding: '0.75rem',
+                  background: '#28a745',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                }}
+              >
+                Create User
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowCreateUser(false)}
+                style={{
+                  flex: 1,
+                  padding: '0.75rem',
+                  background: '#6c757d',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
+
+      {/* Assign Faculty to Theme */}
+      <section
+        style={{
+          marginBottom: '2rem',
+          padding: '1.5rem',
+          background: '#f8f9fa',
+          borderRadius: '8px',
+        }}
+      >
+        <h3>Assign Faculty to Theme</h3>
+
+        {adminAssignMsg && (
+          <div
+            style={{
+              margin: '0.5rem 0 1rem 0',
+              padding: '0.5rem 0.75rem',
+              background: adminAssignMsg.includes('✅')
+                ? '#d4edda'
+                : '#f8d7da',
+              color: adminAssignMsg.includes('✅')
+                ? '#155724'
+                : '#721c24',
+              borderRadius: 4,
+            }}
+          >
+            {adminAssignMsg}
+          </div>
+        )}
+
+        <div
+          style={{
+            display: 'flex',
+            gap: '1rem',
+            marginBottom: '1rem',
+            flexWrap: 'wrap',
+          }}
+        >
+          <select
+            value={selectedFacultyId}
+            onChange={(e) => setSelectedFacultyId(e.target.value)}
+            style={{ flex: 1, minWidth: 200, padding: '0.5rem' }}
+          >
+            <option value="">Select Faculty</option>
+            {faculties.map((f) => (
+              <option key={f.UserID} value={f.UserID}>
+                {(f.Name || f.UserID) + ' (' + f.UserID + ')'}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={selectedThemeId}
+            onChange={(e) => setSelectedThemeId(e.target.value)}
+            style={{ flex: 1, minWidth: 200, padding: '0.5rem' }}
+          >
+            <option value="">Select Theme</option>
+            {themes.map((t) => (
+              <option key={t.ThemeID} value={t.ThemeID}>
+                {t.ThemeName}
+              </option>
+            ))}
+          </select>
+
+          <button
+            onClick={handleAssignFacultyTheme}
+            style={{
+              padding: '0.5rem 1rem',
+              background: '#007bff',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 4,
+              cursor: 'pointer',
+            }}
+          >
+            Assign
+          </button>
+        </div>
+
+        <h4>Current Assignments</h4>
+        {assignments.length === 0 ? (
+          <div style={{ padding: '0.5rem', color: '#666' }}>
+            No assignments yet.
+          </div>
+        ) : (
+          <table
+            style={{
+              width: '100%',
+              borderCollapse: 'collapse',
+              marginTop: '0.5rem',
+            }}
+          >
+            <thead>
+              <tr style={{ background: '#e9ecef' }}>
+                <th style={{ textAlign: 'left', padding: '0.5rem' }}>
+                  Faculty
+                </th>
+                <th style={{ textAlign: 'left', padding: '0.5rem' }}>
+                  Theme
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {assignments.map((a) => (
+                <tr key={a.FacultyUserID}>
+                  <td style={{ padding: '0.5rem' }}>
+                    {a.FacultyName} ({a.FacultyUserID})
+                  </td>
+                  <td style={{ padding: '0.5rem' }}>{a.ThemeName}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
 
       {/* Projects Ranking Table */}
       <section>
-        <h3 style={{ marginBottom: '1rem', color: '#333' }}>
+        <h3
+          style={{ marginBottom: '1rem', color: '#333' }}
+        >
           All Projects ({projects.length}) - Sorted by {sortBy.toUpperCase()}{' '}
           {sortOrder === 'desc' ? '↓' : '↑'}
         </h3>
@@ -306,102 +650,170 @@ const handleCreateUser = async (e) => {
                   style={{ padding: '1rem', textAlign: 'left', cursor: 'pointer' }}
                   onClick={() => {
                     setSortBy('title');
-                    setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                    setSortOrder(
+                      sortOrder === 'asc' ? 'desc' : 'asc'
+                    );
                   }}
                 >
                   Project{' '}
                   <span style={{ fontSize: '0.9em' }}>
-                    {sortBy === 'title' ? (sortOrder === 'desc' ? '↓' : '↑') : ''}
+                    {sortBy === 'title'
+                      ? sortOrder === 'desc'
+                        ? '↓'
+                        : '↑'
+                      : ''}
                   </span>
                 </th>
                 <th
                   style={{ padding: '1rem', textAlign: 'center', cursor: 'pointer' }}
                   onClick={() => {
                     setSortBy('phase1');
-                    setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                    setSortOrder(
+                      sortOrder === 'asc' ? 'desc' : 'asc'
+                    );
                   }}
                 >
                   Phase 1{' '}
                   <span style={{ fontSize: '0.9em' }}>
-                    {sortBy === 'phase1' ? (sortOrder === 'desc' ? '↓' : '↑') : ''}
+                    {sortBy === 'phase1'
+                      ? sortOrder === 'desc'
+                        ? '↓'
+                        : '↑'
+                      : ''}
                   </span>
                 </th>
                 <th
                   style={{ padding: '1rem', textAlign: 'center', cursor: 'pointer' }}
                   onClick={() => {
                     setSortBy('phase2');
-                    setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                    setSortOrder(
+                      sortOrder === 'asc' ? 'desc' : 'asc'
+                    );
                   }}
                 >
                   Phase 2{' '}
                   <span style={{ fontSize: '0.9em' }}>
-                    {sortBy === 'phase2' ? (sortOrder === 'desc' ? '↓' : '↑') : ''}
+                    {sortBy === 'phase2'
+                      ? sortOrder === 'desc'
+                        ? '↓'
+                        : '↑'
+                      : ''}
                   </span>
                 </th>
                 <th
                   style={{ padding: '1rem', textAlign: 'center', cursor: 'pointer' }}
                   onClick={() => {
                     setSortBy('phase3');
-                    setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                    setSortOrder(
+                      sortOrder === 'asc' ? 'desc' : 'asc'
+                    );
                   }}
                 >
                   Phase 3{' '}
                   <span style={{ fontSize: '0.9em' }}>
-                    {sortBy === 'phase3' ? (sortOrder === 'desc' ? '↓' : '↑') : ''}
+                    {sortBy === 'phase3'
+                      ? sortOrder === 'desc'
+                        ? '↓'
+                        : '↑'
+                      : ''}
                   </span>
                 </th>
                 <th
                   style={{ padding: '1rem', textAlign: 'center', cursor: 'pointer' }}
                   onClick={() => {
                     setSortBy('teamSize');
-                    setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                    setSortOrder(
+                      sortOrder === 'asc' ? 'desc' : 'asc'
+                    );
                   }}
                 >
                   Team{' '}
                   <span style={{ fontSize: '0.9em' }}>
-                    {sortBy === 'teamSize' ? (sortOrder === 'desc' ? '↓' : '↑') : ''}
+                    {sortBy === 'teamSize'
+                      ? sortOrder === 'desc'
+                        ? '↓'
+                        : '↑'
+                      : ''}
                   </span>
                 </th>
-                <th style={{ padding: '1rem', textAlign: 'center' }}>Actions</th>
+                <th style={{ padding: '1rem', textAlign: 'center' }}>
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody>
               {sortedProjects.map((project) => (
-                <tr key={project.ProjectID} style={{ borderBottom: '1px solid #eee' }}>
+                <tr
+                  key={project.ProjectID}
+                  style={{ borderBottom: '1px solid #eee' }}
+                >
                   <td style={{ padding: '1rem', fontWeight: '500' }}>
                     <div>
-                      <strong>{project.Title}</strong> (ID: {project.ProjectID})
+                      <strong>{project.Title}</strong> (ID:{' '}
+                      {project.ProjectID})
                       <br />
                       <small style={{ color: '#666' }}>
                         {project.ThemeName} | {project.Status}
                       </small>
                     </div>
                   </td>
-                  <td style={{ padding: '1rem', textAlign: 'center', fontWeight: 'bold' }}>
-                    {project.phase1_avg ? project.phase1_avg.toFixed(1) : '—'}
+                  <td
+                    style={{
+                      padding: '1rem',
+                      textAlign: 'center',
+                      fontWeight: 'bold',
+                    }}
+                  >
+                    {project.phase1_avg
+                      ? project.phase1_avg.toFixed(1)
+                      : '—'}
                     <br />
                     <small>
                       ({project.phase1_scored}/{project.phase1_total})
                     </small>
                   </td>
-                  <td style={{ padding: '1rem', textAlign: 'center', fontWeight: 'bold' }}>
-                    {project.phase2_avg ? project.phase2_avg.toFixed(1) : '—'}
+                  <td
+                    style={{
+                      padding: '1rem',
+                      textAlign: 'center',
+                      fontWeight: 'bold',
+                    }}
+                  >
+                    {project.phase2_avg
+                      ? project.phase2_avg.toFixed(1)
+                      : '—'}
                     <br />
                     <small>
                       ({project.phase2_scored}/{project.phase2_total})
                     </small>
                   </td>
-                  <td style={{ padding: '1rem', textAlign: 'center', fontWeight: 'bold' }}>
-                    {project.phase3_avg ? project.phase3_avg.toFixed(1) : '—'}
+                  <td
+                    style={{
+                      padding: '1rem',
+                      textAlign: 'center',
+                      fontWeight: 'bold',
+                    }}
+                  >
+                    {project.phase3_avg
+                      ? project.phase3_avg.toFixed(1)
+                      : '—'}
                     <br />
-                    <small style={{ color: project.phase3_avg ? 'green' : 'orange' }}>
+                    <small
+                      style={{
+                        color: project.phase3_avg ? 'green' : 'orange',
+                      }}
+                    >
                       ({project.phase3_scored}/{project.phase3_total})
                     </small>
                   </td>
-                  <td style={{ padding: '1rem', textAlign: 'center' }}>
+                  <td
+                    style={{ padding: '1rem', textAlign: 'center' }}
+                  >
                     {project.team_size || 0}
                   </td>
-                  <td style={{ padding: '1rem', textAlign: 'center' }}>
+                  <td
+                    style={{ padding: '1rem', textAlign: 'center' }}
+                  >
                     <div
                       style={{
                         display: 'flex',
@@ -411,7 +823,9 @@ const handleCreateUser = async (e) => {
                       }}
                     >
                       <button
-                        onClick={() => handleViewProject(project.ProjectID)}
+                        onClick={() =>
+                          handleViewProject(project.ProjectID)
+                        }
                         style={{
                           padding: '0.5rem 1rem',
                           background: '#007bff',
@@ -427,7 +841,9 @@ const handleCreateUser = async (e) => {
                       {project.Status === 'Unassigned' && (
                         <>
                           <button
-                            onClick={() => handleApprove(project.ProjectID)}
+                            onClick={() =>
+                              handleApprove(project.ProjectID)
+                            }
                             style={{
                               padding: '0.5rem 1rem',
                               background: '#28a745',
@@ -441,7 +857,9 @@ const handleCreateUser = async (e) => {
                             ✅ Approve
                           </button>
                           <button
-                            onClick={() => handleReject(project.ProjectID)}
+                            onClick={() =>
+                              handleReject(project.ProjectID)
+                            }
                             style={{
                               padding: '0.5rem 1rem',
                               background: '#dc3545',
@@ -519,13 +937,26 @@ const handleCreateUser = async (e) => {
                 }}
               >
                 {teamMembers.length === 0 ? (
-                  <p style={{ color: '#666', textAlign: 'center', padding: '2rem' }}>
+                  <p
+                    style={{
+                      color: '#666',
+                      textAlign: 'center',
+                      padding: '2rem',
+                    }}
+                  >
                     No team members
                   </p>
                 ) : (
                   teamMembers.map((member) => (
-                    <div key={member.UserID} style={{ padding: '0.75rem', borderBottom: '1px solid #eee' }}>
-                      <strong>{member.UserName}</strong> ({member.UserID})
+                    <div
+                      key={member.UserID}
+                      style={{
+                        padding: '0.75rem',
+                        borderBottom: '1px solid #eee',
+                      }}
+                    >
+                      <strong>{member.UserName}</strong> (
+                      {member.UserID})
                     </div>
                   ))
                 )}
@@ -546,16 +977,31 @@ const handleCreateUser = async (e) => {
                 }}
               >
                 {selectedSubs.length === 0 ? (
-                  <p style={{ color: '#666', textAlign: 'center', padding: '2rem' }}>No submissions</p>
+                  <p
+                    style={{
+                      color: '#666',
+                      textAlign: 'center',
+                      padding: '2rem',
+                    }}
+                  >
+                    No submissions
+                  </p>
                 ) : (
                   selectedSubs.map((sub) => (
                     <div
                       key={sub.SubmissionID}
-                      style={{ padding: '1rem', borderBottom: '1px solid #eee', fontSize: '0.9rem' }}
+                      style={{
+                        padding: '1rem',
+                        borderBottom: '1px solid #eee',
+                        fontSize: '0.9rem',
+                      }}
                     >
-                      <strong>{sub.SubmissionType}:</strong> {sub.SubmissionContent}
+                      <strong>{sub.SubmissionType}:</strong>{' '}
+                      {sub.SubmissionContent}
                       <br />
-                      <small style={{ color: '#666' }}>{sub.SubmittedAt}</small>
+                      <small style={{ color: '#666' }}>
+                        {sub.SubmittedAt}
+                      </small>
                     </div>
                   ))
                 )}
@@ -566,8 +1012,6 @@ const handleCreateUser = async (e) => {
       )}
     </div>
   );
-  // Add this SECTION to AdminDashboard.js (after Export CSV button
-
 }
 
 export default AdminDashboard;

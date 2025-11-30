@@ -14,14 +14,24 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const token = localStorage.getItem('token');
     const role = localStorage.getItem('role');
+    const userId = localStorage.getItem('userId');
+    
     if (token && role) {
       setAuthToken(token);
       setUserRole(role);
+      setUserId(userId);
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       
+      // Decode JWT payload for verification
       try {
         const payload = JSON.parse(atob(token.split('.')[1]));
-        setUserId(payload.sub || payload.user_id || payload.identity);
+        console.log('🔑 JWT payload:', payload); // DEBUG
+        // Backend might store userId in sub, user_id, or identity
+        const decodedUserId = payload.sub || payload.user_id || payload.identity;
+        if (decodedUserId && decodedUserId !== userId) {
+          setUserId(decodedUserId);
+          localStorage.setItem('userId', decodedUserId);
+        }
       } catch (e) {
         console.error('Failed to decode JWT:', e);
       }
@@ -37,25 +47,33 @@ export function AuthProvider({ children }) {
         password 
       });
       
-      // ✅ YOUR backend format: response.data.user.role
-      const { access_token, user } = response.data;
-      const role = user?.role || response.data.role;  // Fallback
+      // ✅ Handle different backend response formats
+      const { access_token, user, role } = response.data;
       
-      // ✅ Save ALL data
+      // Extract role from various possible locations
+      const userRole = role || user?.role || user?.Role;
+      
+      // Extract userId from various possible locations
+      const userIdFromResponse = user?.userId || user?.UserID || user?.id;
+      
+      console.log('Login response:', response.data); // DEBUG
+      
+      // ✅ Save ALL data to localStorage
       localStorage.setItem('token', access_token);
-      localStorage.setItem('role', role);
-      localStorage.setItem('userId', user?.userId);
+      localStorage.setItem('role', userRole);
+      localStorage.setItem('userId', userIdFromResponse);
       
+      // ✅ Set context state
       setAuthToken(access_token);
-      setUserRole(role);
-      setUserId(user?.userId);
+      setUserRole(userRole);
+      setUserId(userIdFromResponse);
       axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
       
-      // ✅ Login.js expects this format
+      // ✅ Return expected format for Login.js
       return { 
         success: true, 
-        role: role,  // ✅ From user.role
-        userId: user?.userId 
+        role: userRole,
+        userId: userIdFromResponse 
       };
     } catch (error) {
       console.error('Login failed:', error.response?.data || error.message);
@@ -81,7 +99,7 @@ export function AuthProvider({ children }) {
   const value = {
     authToken,
     userRole,
-    userId,
+    userId,        // ✅ NOW AVAILABLE for NotificationBell
     loginUser,
     logoutUser,
     getAuthToken,

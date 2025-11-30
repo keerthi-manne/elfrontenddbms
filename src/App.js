@@ -1,4 +1,3 @@
-// src/App.js - COMPLETE VERSION
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
@@ -7,10 +6,11 @@ import Projects from './pages/Projects';
 import AdminDashboard from './pages/AdminDashboard';
 import FacultyDashboard from './pages/FacultyDashboard';
 import StudentDashboard from './pages/StudentDashboard';
+import ProjectDetails from './pages/ProjectDetails';  // ✅ NEW IMPORT
 import NotFound from './pages/NotFound';
 import ProtectedRoute from './components/layout/ProtectedRoute';
-import NotificationBell from './components/layout/NotificationBell';  // ✅ ADDED
-import { useAuth } from './context/AuthContext';  // ✅ ADDED
+import NotificationBell from './components/layout/NotificationBell';
+import { useAuth } from './context/AuthContext';
 
 // Navbar Component
 function Navbar() {
@@ -89,12 +89,20 @@ function App() {
                 }
               />
 
-              {/* Legacy Projects page */}
+              {/* Projects page + DETAILS ROUTE ✅ NEW */}
               <Route
                 path="/projects"
                 element={
                   <ProtectedRoute allowedRoles={['Student', 'Admin', 'Faculty']}>
                     <Projects />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/projects/:projectId"  // ✅ NEW PROJECT DETAILS ROUTE
+                element={
+                  <ProtectedRoute allowedRoles={['Student', 'Admin', 'Faculty']}>
+                    <ProjectDetails />
                   </ProtectedRoute>
                 }
               />

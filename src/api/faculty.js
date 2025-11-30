@@ -38,18 +38,21 @@ export const getMyTheme = (token) => {
   });
 };
 
+// ✅ FIXED: /projects/${projectId}/details (MATCHES YOUR BACKEND)
 export const getProjectDetailsWithSubmissions = (token, projectId) => {
-  return axios.get(`${API_BASE}/projects/${projectId}/details_with_submissions`, {
+  return axios.get(`${API_BASE}/projects/${projectId}/details`, {
     headers: { Authorization: `Bearer ${token}` }
   });
 };
 
+// ✅ FIXED: Use your existing /evaluations endpoint
 export const submitEvaluation = (token, projectId, evalData) => {
-  return axios.post(`${API_BASE}/faculty/evaluate/${projectId}`, evalData, {
+  return axios.post(`${API_BASE}/evaluations`, evalData, {
     headers: { Authorization: `Bearer ${token}` }
   });
 };
 
+// ✅ CORRECT: Matches your backend
 export const getProjectTeamMembers = (token, projectId) => {
   return axios.get(`${API_BASE}/projects/${projectId}/team_members`, {
     headers: { Authorization: `Bearer ${token}` }
@@ -69,25 +72,22 @@ export const getMyTeams = (token, userId) => {
 };
 
 export const getAllProjectsWithAggregates = (token) => {
-  return axios.get(`${API_BASE}/projects/admin/all_with_aggregates`, {  // ✅ ADD /projects
+  return axios.get(`${API_BASE}/projects/admin/all_with_aggregates`, {
     headers: { Authorization: `Bearer ${token}` }
   });
 };
 
-
 export const approveProject = (token, projectId) => {
-  return axios.post(`http://localhost:5000/projects/${projectId}/approve`, {}, {
+  return axios.post(`${API_BASE}/projects/${projectId}/approve`, {}, {
     headers: { Authorization: `Bearer ${token}` }
   });
 };
 
 export const rejectProject = (token, projectId) => {
-  return axios.post(`http://localhost:5000/projects/${projectId}/reject`, {}, {
+  return axios.post(`${API_BASE}/projects/${projectId}/reject`, {}, {
     headers: { Authorization: `Bearer ${token}` }
   });
 };
-
-
 
 export const exportProjectsCSV = (token) => {
   return axios.get(`${API_BASE}/projects/admin/export_csv`, {
